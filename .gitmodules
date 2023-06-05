@@ -1,0 +1,6 @@
+[submodule "observability"]
+	path = observability
+	url = git@github.com:matrixone-cloud/observability.git
+[submodule "lib/matrixone"]
+	path = my-k8s-app/resources/observability
+	url =  git@github.com:matrixone-cloud/observability.git
