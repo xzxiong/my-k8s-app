@@ -55,22 +55,14 @@ const releaseName = "mo-ruler-stack"
 // fake secret for mo-ruler-stack
 // fake secret for grafana
 
-const passwordQpaque = new random.RandomString("password", {
-    length: 12,
-    special: false,
-});
-
-const username = new random.RandomPet("my-user-name");
-
-const password = new random.RandomPassword("password", {
+/*
+const hostQpa = new random.RandomPet("matrixone.xiezexiong");
+const portQpa = new random.RandomPet("6001");
+const userQpa = new random.RandomPet("monitor-mo-ob");
+const passwordQpa = new random.RandomPassword("password", {
     length: 16,
     special: false,
 });
-
-export const usernameVal = username.toString();
-export const passwdstd = password.id;
-export const passwordQpaqueResutl = passwordQpaque.result;
-
 
 const moDbSecret = new kubernetes.core.v1.Secret("ruler-mo-secret", {
     metadata: {
@@ -79,13 +71,15 @@ const moDbSecret = new kubernetes.core.v1.Secret("ruler-mo-secret", {
     },
     type: "Opaque",
     data: {
-        host: "matrixone.xiezexiong",
-        port: "6001",
-        user: "monitor-mo-ob",
-        password: passwordQpaque.result,
+        host: hostQpa.id,
+        port: portQpa.id,
+        user: userQpa.id,
+        password: passwordQpa.id,
     },
 });
 
+const clientIDQpa = new random.RandomPet("client_id");
+const clientSecretQpa = new random.RandomPet("client_secret");
 const oauthSecret = new kubernetes.core.v1.Secret("auth-generic-oauth-secret", {
     metadata: {
         name: "auth-generic-oauth-secret",
@@ -93,10 +87,10 @@ const oauthSecret = new kubernetes.core.v1.Secret("auth-generic-oauth-secret", {
     },
     type: "Opaque",
     data: {
-        "client_id": "client_id",
-        "client_secret": "client_secret",
+        "client_id": clientIDQpa.id,
+        "client_secret": clientSecretQpa.id,
     },
-});
+});*/
 
 // resources/observability/charts/mo-ruler-stack
 const moRulerStack = new kubernetes.helm.v3.Chart(releaseName, {
@@ -195,7 +189,7 @@ const moRulerStack = new kubernetes.helm.v3.Chart(releaseName, {
 
 // Create a ConfigMap depending on the Chart. The ConfigMap will not be created until after all of the Chart
 // resources are ready. Note the use of the `ready` attribute; depending on the Chart resource directly will not work.
-const rulerDatasouceConfig = new kubernetes.core.v1.ConfigMap("foo", {
+const rulerDatasouceConfig = new kubernetes.core.v1.ConfigMap("mo-ob-ruler-datasource", {
     metadata: {
         namespace: ns,
         labels: {
