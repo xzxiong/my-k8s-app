@@ -1,7 +1,119 @@
 import * as pulumi from "@pulumi/pulumi";
-import * as kubernetes from "@pulumi/kubernetes";
-import * as random from "@pulumi/random";
+import * as k8s from "@pulumi/kubernetes";
+import { decode } from "punycode";
+import { it } from "node:test";
+import { log } from "console";
+import { Secret } from "@pulumi/kubernetes/core/v1";
+// import * as random from "@pulumi/random";
+import * as k8sSDK from '@kubernetes/client-node';
+//const k8s = require('@kubernetes/client-node');
 
+const moobAccountLabelSelector = { "app.kubernetes.io/instance": "prom" };
+
+const kc = new k8sSDK.KubeConfig();
+kc.loadFromDefault();
+
+const k8sApi = kc.makeApiClient(k8sSDK.CoreV1Api);
+
+console.log("listNamespace")
+k8sApi.listNamespace(undefined, undefined, undefined, undefined, "app.kubernetes.io/instance=prom").then((res) => {
+    //k8sApi.listNamespace().then((res) => {
+    console.log("namespace: ");
+    console.log(res.body);
+
+    for (let item of res.body.items) {
+        console.log("name %s", item.metadata?.name);
+    }
+});
+
+// other
+const ns = "mo-ob"
+
+console.log("Namespace.get")
+const n = k8s.core.v1.Namespace.get("mo-ob-account", "")
+console.log(n.metadata)
+
+// Get the secret named "mysecret" in the "default" namespace
+let mySecret = k8s.core.v1.Secret.get("my-secret", "default/prom-grafana");
+// const mySecret = pulumi.output(k8s.core.v1.getSecret({
+//     name: "prom-grafana",
+//     namespace: "default",
+// }));
+
+// Export the secret's name.
+export const secretName = mySecret.metadata.name;
+
+// Decode the secret data
+const decodedSecret = mySecret.data.apply(data => {
+    const decoded: { [key: string]: string } = {};
+    for (const k in data) {
+        decoded[k] = Buffer.from(data[k], 'base64').toString();
+    }
+    return decoded;
+});
+
+console.log("decodedSecret")
+decodedSecret.apply(item => console.log(item));
+// Export the decoded secret
+export const secret = decodedSecret;
+export const user = decodedSecret["admin-user"];
+console.log("user")
+user.apply(item => console.log(item));
+
+
+const moDbSecret = new k8s.core.v1.Secret("ruler-mo-secret", {
+    metadata: {
+        name: "ruler-mo-secret",
+        namespace: ns,
+    },
+    type: "Opaque",
+    data: {
+        host: Buffer.from("free2-mo-namespace").toString('base64'),
+        port: Buffer.from("6001").toString('base64'),
+        user: user,
+        password: decodedSecret["admin-password"],
+    },
+});
+
+moDbSecret.data.apply(item => console.log(item));
+
+
+/*
+// example
+apiVersion: v1
+data:
+  admin-password: cHJvbS1vcGVyYXRvcg==
+  admin-user: YWRtaW4=
+  ldap-toml: ""
+kind: Secret
+metadata:
+  annotations:
+    meta.helm.sh/release-name: prom
+    meta.helm.sh/release-namespace: default
+  creationTimestamp: "2023-06-26T10:01:05Z"
+  labels:
+    app.kubernetes.io/instance: prom
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/version: 9.1.6
+    helm.sh/chart: grafana-6.40.0
+  name: prom-grafana
+  namespace: default
+  resourceVersion: "185848"
+  uid: bb5c0fc0-e14c-4b43-b686-e02c27c95517
+type: Opaque
+*/
+
+
+//const mySecrets = k8s.core.v1.SecretList.get("my-secrets", "", { labelSelector: moobAccountLabelSelector });
+//const secretNames = mySecrets.items.apply(items => items.map(i => i.metadata.name));
+//secretNames.apply(name => console.log(name));
+
+
+//const moobCloudSecret = getMOcloudMOOBUser()
+//const moobCloudSecret = getMOcloudMOOBUser({ "matrixone.cloud/role": "observability"})
+
+/*
 const config = new pulumi.Config();
 const k8sNamespace = config.get("k8sNamespace") || "default";
 const appLabels = {
@@ -9,7 +121,7 @@ const appLabels = {
 };
 
 // Create a namespace (user supplies the name of the namespace)
-const ingressNs = new kubernetes.core.v1.Namespace("ingressns", {
+const ingressNs = new k8s.core.v1.Namespace("ingressns", {
     metadata: {
         labels: appLabels,
         name: k8sNamespace,
@@ -17,7 +129,7 @@ const ingressNs = new kubernetes.core.v1.Namespace("ingressns", {
 });
 
 // Use Helm to install the Nginx ingress controller
-const ingressController = new kubernetes.helm.v3.Release("ingresscontroller", {
+const ingressController = new k8s.helm.v3.Release("ingresscontroller", {
     chart: "nginx-ingress",
     namespace: ingressNs.metadata.name,
     repositoryOpts: {
@@ -40,15 +152,16 @@ const ingressController = new kubernetes.helm.v3.Release("ingresscontroller", {
     },
     version: "0.14.1",
 });
+/*
 
 // Export some values for use elsewhere
-export const name = ingressController.name;
+//export const name = ingressController.name;
 
 
 
 // ----------------------------------------------------------------
 // -- mo agent stack --------------------------------
-const ns = "mo-ob"
+
 const releaseName = "mo-ruler-stack"
 
 
@@ -64,7 +177,7 @@ const passwordQpa = new random.RandomPassword("password", {
     special: false,
 });
 
-const moDbSecret = new kubernetes.core.v1.Secret("ruler-mo-secret", {
+const moDbSecret = new k8s.core.v1.Secret("ruler-mo-secret", {
     metadata: {
         name: "ruler-mo-secret",
         namespace: ns,
@@ -78,9 +191,10 @@ const moDbSecret = new kubernetes.core.v1.Secret("ruler-mo-secret", {
     },
 });
 
+
 const clientIDQpa = new random.RandomPet("client_id");
 const clientSecretQpa = new random.RandomPet("client_secret");
-const oauthSecret = new kubernetes.core.v1.Secret("auth-generic-oauth-secret", {
+const oauthSecret = new k8s.core.v1.Secret("auth-generic-oauth-secret", {
     metadata: {
         name: "auth-generic-oauth-secret",
         namespace: ns,
@@ -90,10 +204,12 @@ const oauthSecret = new kubernetes.core.v1.Secret("auth-generic-oauth-secret", {
         "client_id": clientIDQpa.id,
         "client_secret": clientSecretQpa.id,
     },
-});*/
+});
+*/
 
 // resources/observability/charts/mo-ruler-stack
-const moRulerStack = new kubernetes.helm.v3.Chart(releaseName, {
+/*
+const moRulerStack = new k8s.helm.v3.Chart(releaseName, {
     path: "resources/observability/charts/mo-ruler-stack",
     namespace: ns,
     values: {
@@ -184,12 +300,13 @@ const moRulerStack = new kubernetes.helm.v3.Chart(releaseName, {
             },
         }
     },
-})
+})*/
 
 
 // Create a ConfigMap depending on the Chart. The ConfigMap will not be created until after all of the Chart
 // resources are ready. Note the use of the `ready` attribute; depending on the Chart resource directly will not work.
-const rulerDatasouceConfig = new kubernetes.core.v1.ConfigMap("mo-ob-ruler-datasource", {
+/*
+const rulerDatasouceConfig = new k8s.core.v1.ConfigMap("mo-ob-ruler-datasource", {
     metadata: {
         namespace: ns,
         labels: {
@@ -212,3 +329,4 @@ datasources:
 `,
     },
 }, { dependsOn: moRulerStack.ready })
+*/
